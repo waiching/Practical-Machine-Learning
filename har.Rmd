@@ -1,0 +1,115 @@
+---
+title: "Practical Machine Learning"
+author: "WC, Lin"
+date: "December 18, 2015"
+output: html_document
+---
+**Background**
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. The rest of the report will show how a model is built, how cross validation is used, what is the expected out of sample error, what and why are the choices are made. The prediction model will be used to predict 20 different test cases. 
+
+**How you built your model**
+
+The primary variable outcome is Classe which consists of levels - A, B, C, D, E. They reprensents weight lifting's level of condition during participants' exercise.
+The training data set is large - 19622, which is capable to perform split into subtraining and subtesting data set.
+
+Two models will be created with decision tree and random forest algorithm. Only the model with highest accuracy and least expected out of sample error will be chosen to have an efficient performance.
+
+
+**Loading packages and get the data**
+```{r warning=FALSE}
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(e1071) #having error of requireNamespaceQuietStop("e1071")
+
+set.seed(8111)
+# load and replace missing value with NA
+get_training<-read.csv("C:/myR/Module 8/Data/pml-training.csv", na.strings = c("NA","#DIV/0!",""))
+get_testing<-read.csv("C:/myR/Module 8/Data/pml-testing.csv", na.strings = c("NA","#DIV/0!",""))
+```
+
+**Preliminary understanding on data set**
+```{r warning=FALSE}
+dim(get_training)
+dim(get_testing)
+```
+
+**Getting the data clean**
+
+Cleanse the column that is without value and unused columns
+```{r warning=FALSE}
+get_training<-get_training[,colSums(is.na(get_training)) == 0]
+get_testing <-get_testing[,colSums(is.na(get_testing)) == 0]
+get_training<-get_training[,-c(1:7)]
+get_testing<-get_testing[,-c(1:7)]
+dim(get_training)
+dim(get_testing)
+```
+
+**Cross-validation**
+
+After unnecessary columns have been reduced, we'll now perform data partition for training data set.
+
+Random split will be done on training data set with 75% on train_subTraining and 25% of train_subTesting. Predition model will be done on train_subTraining and test against train_subTesting data. Once we know which model delivers highest accuracy, it will be used to test againts get_testing data set.
+```{r, echo=FALSE}
+subsamples <- createDataPartition(y=get_training$classe, p=0.75, list=FALSE)
+train_subTraining <- get_training[subsamples, ] 
+train_subTesting <- get_training[-subsamples, ]
+```
+
+Let's see what's the number of occurance in the "classe" variable of the subtraining sample set.
+```{r warning=FALSE}
+plot(train_subTraining$classe, col="orange", main="Variable classe within the subTraining sample set", xlab="classe levels", ylab="Frequency")
+```
+
+From the plot, we can see that Classse A has the highest frequency, while Classe D has the least. 
+
+**Prediction model with Decision Tree algorithm**
+```{r warning=FALSE}
+model_dt <- rpart(classe ~ ., data=train_subTraining, method="class")
+prediction_dt <- predict(model_dt, train_subTesting, type="class")
+# create decision tree model plot
+rpart.plot(model_dt, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+
+```
+
+Test result against the subtesting data set
+```{r warning=FALSE}
+confusionMatrix(prediction_dt, train_subTesting$classe)
+```
+**Expected out of sample error**
+
+Expected out of sample error is 1 - accuracy from the cross validation data. 
+
+As we can see, the above model has only 0.7545 accuracy, with 0.2455 of expected out of sample error.
+
+**Prediction model with Random Forest algorithm**
+```{r warning=FALSE}
+model_rf <- randomForest(classe ~. , data=train_subTraining, method="class")
+prediction_rf <- predict(model_rf, train_subTesting, type="class")
+# Test result against the subtesting data set
+confusionMatrix(prediction_rf, train_subTesting$classe)
+```
+Random forest is able to produce 0.9963 accuracy of prediction. The expected out of sample error of Random Forest model is just 0.0037. That said, it performs better than Decision Tree and we'll have very few or none of test samples will be misclassified. So, random forest prediction algorithm is chosen.
+
+Let's see what's the final outcome result with Random Forest prediction algorithm
+```{r warning=FALSE}
+model_final <- randomForest(classe ~. , data=get_training, method="class")
+predictfinal<- predict(model_final, get_testing, type="class")
+predictfinal
+```
+
+Write the 20 cases into a file for submission
+```{r warning=FALSE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predictfinal)
+```
+
